@@ -76,12 +76,17 @@ pipeline {
                     npm audit --audit-level=high
                 '''
             }
-       }
+        }
 
         stage('Run Tests') {
             steps {
                 echo 'Running test suite...'
-                sh 'npm test -- --watchAll=false || exit 1'
+                sh '''
+                    export NVM_DIR="$HOME/.nvm"
+                    . "$NVM_DIR/nvm.sh"
+                    nvm use 24
+                    npm test -- --watchAll=false || exit 1
+                '''
             }
         }
 
@@ -107,7 +112,12 @@ pipeline {
         stage('Build Application') {
             steps {
                 echo 'Building React app with Vite...'
-                sh 'npm run build'
+                sh '''
+                    export NVM_DIR="$HOME/.nvm"
+                    . "$NVM_DIR/nvm.sh"
+                    nvm use 24
+                    npm run build
+                '''
             }
         }
 
