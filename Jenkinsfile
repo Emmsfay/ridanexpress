@@ -62,16 +62,11 @@ pipeline {
             }
         }
 
+
         stage('Dependency Vulnerability Scan') {
             steps {
                 echo 'Running npm audit for known CVEs...'
-
-                sh '''
-                    npm audit --audit-level=high || {
-                        echo "Security vulnerabilities found"
-                        exit 1
-                    }
-                '''
+                sh 'npm audit --audit-level=high'
             }
         }
 
