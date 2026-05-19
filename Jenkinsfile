@@ -198,14 +198,15 @@ pipeline {
         }
         always {
             // Guard against IMAGE_NAME not being set if pipeline failed early
-            script {
-                if (env.IMAGE_NAME) {
-                    sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
+            node('built-in') {
+                script {
+                    if (env.IMAGE_NAME) {
+                        sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
+                    }
                 }
-            }
             // deleteDir() is built into Jenkins — no plugin required
             // Wipes the workspace so the next build starts completely clean
-            deleteDir()
-        }
-    }
+                deleteDir()
+            }
+       }
 }
