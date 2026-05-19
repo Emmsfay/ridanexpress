@@ -201,10 +201,12 @@ pipeline {
         always {
             // Remove the local Docker image to free disk space on the Jenkins agent
             // || true prevents this cleanup step from failing the post block
-            sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
-
-            // Wipe the workspace so the next build starts completely clean
-            cleanWs()
+             script {
+                 if (env.IMAGE_NAME) {
+                     sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
+                 }
+             }
+             cleanWs()
         }
-    }
+    
 }
