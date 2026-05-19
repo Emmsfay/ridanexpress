@@ -3,9 +3,7 @@ pipeline {
 
     // Use Jenkins-managed NodeJS tool for Node stages. Sonar will still run
     // in a container to avoid requiring a local scanner install.
-    tools {
-    nodejs 'Node22'
-    }
+    
     environment {
         DOCKER_CREDENTIALS = credentials('dockerhub-credentials')
         SONAR_TOKEN        = credentials('sonarqube-token')
