@@ -1,10 +1,8 @@
 pipeline {
     agent any
 
-    tools {
-        jdk 'JDK21'
-        nodejs 'Node22'
-    }
+    // Use per-stage Docker agents for Node and Sonar to avoid relying on
+    // Jenkins global tool installations that may be missing on the agent.
 
     environment {
         DOCKER_CREDENTIALS = credentials('dockerhub-credentials')
@@ -43,6 +41,7 @@ pipeline {
         }
 
         stage('Install Dependencies') {
+            agent { docker { image 'node:18' } }
             steps {
                 echo 'Installing dependencies with npm ci...'
                 sh 'npm ci'
@@ -50,6 +49,7 @@ pipeline {
         }
 
         stage('Dependency Vulnerability Scan') {
+            agent { docker { image 'node:18' } }
             steps {
                 echo 'Running npm audit for known CVEs...'
                 sh 'npm audit --audit-level=high'
@@ -57,6 +57,7 @@ pipeline {
         }
 
         stage('Run Tests') {
+            agent { docker { image 'node:18' } }
             steps {
                 echo 'Running test suite...'
                 sh 'npm test -- --watchAll=false'
@@ -64,10 +65,11 @@ pipeline {
         }
 
         stage('SAST - SonarQube Analysis') {
+            agent { docker { image 'sonarsource/sonar-scanner-cli:latest' } }
             steps {
                 echo 'Running SonarQube static analysis...'
                 withSonarQubeEnv('SonarQube') {
-                    sh 'npx sonar-scanner'
+                    sh 'sonar-scanner'
                 }
             }
         }
@@ -82,6 +84,7 @@ pipeline {
         }
 
         stage('Build Application') {
+            agent { docker { image 'node:18' } }
             steps {
                 echo 'Building React app with Vite...'
                 sh 'npm run build'
