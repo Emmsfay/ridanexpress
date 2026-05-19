@@ -66,9 +66,17 @@ pipeline {
         stage('Dependency Vulnerability Scan') {
             steps {
                 echo 'Running npm audit for known CVEs...'
-                sh 'npm audit --audit-level=high'
+
+                sh '''
+                    export NVM_DIR="$HOME/.nvm"
+                    . "$NVM_DIR/nvm.sh"
+
+                    nvm use 24
+
+                    npm audit --audit-level=high
+                '''
             }
-        }
+       }
 
         stage('Run Tests') {
             steps {
