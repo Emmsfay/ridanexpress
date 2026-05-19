@@ -43,35 +43,27 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 echo 'Installing dependencies with npm ci...'
-                script {
-                    // Prefer Jenkins-managed Node tool; if unavailable, fallback to NVM
-                    try {
-                        def nodeHome = tool name: 'Node22', type: 'NodeJS'
-                        env.PATH = "${nodeHome}/bin:${env.PATH}"
-                        sh 'echo "Using node from: $(which node || true) (Jenkins tool)"'
-                        sh 'node --version || true'
-                        sh 'npm --version || true'
-                    } catch (err) {
-                        echo "Jenkins Node tool not available: ${err}"
-                        // Source NVM and use Node v24 (adjust NVM_DIR or version as needed)
-                        sh '''
-                            export NVM_DIR="$HOME/.nvm"
-                            if [ -s "$NVM_DIR/nvm.sh" ]; then
-                              . "$NVM_DIR/nvm.sh"
-                              nvm install 24 || true
-                              nvm use 24
-                              echo "Using node from: $(which node || true) (nvm)"
-                              node --version
-                              npm --version
-                            else
-                              echo "NVM not found at $NVM_DIR"
-                            fi
-                        '''
-                    }
-                }
-                sh 'npm ci'
-            }
-        }
+                sh '''
+                   export NVM_DIR="$HOME/.nvm"
+                
+                if [ -s "$NVM_DIR/nvm.sh" ]; then
+                    . "$NVM_DIR/nvm.sh"
+
+                    nvm install 24 || true
+                    nvm use 24
+
+                    echo "Using node from: $(which node)"
+                    node --version
+                    npm --version
+
+                    npm ci
+               else
+                    echo "NVM not found at $NVM_DIR"
+                    exit 1
+               fi
+          '''
+      }
+}
 
         stage('Dependency Vulnerability Scan') {
             steps {
