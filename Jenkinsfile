@@ -1,9 +1,6 @@
 pipeline {
     agent any
 
-    // Use Jenkins-managed NodeJS tool for Node stages. Sonar will still run
-    // in a container to avoid requiring a local scanner install.
-    
     environment {
         DOCKER_CREDENTIALS = credentials('dockerhub-credentials')
         SONAR_TOKEN        = credentials('sonarqube-token')
@@ -43,39 +40,45 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 echo 'Installing dependencies with npm ci...'
+
                 sh '''
-                   export NVM_DIR="$HOME/.nvm"
-                
-                if [ -s "$NVM_DIR/nvm.sh" ]; then
-                    . "$NVM_DIR/nvm.sh"
+                    export NVM_DIR="$HOME/.nvm"
 
-                    nvm install 24 || true
-                    nvm use 24
+                    if [ -s "$NVM_DIR/nvm.sh" ]; then
+                        . "$NVM_DIR/nvm.sh"
 
-                    echo "Using node from: $(which node)"
-                    node --version
-                    npm --version
+                        nvm use 24 || nvm install 24
 
-                    npm ci
-               else
-                    echo "NVM not found at $NVM_DIR"
-                    exit 1
-               fi
-          '''
-      }
-}
+                        echo "Using node from: $(which node)"
+                        node -v
+                        npm -v
+
+                        npm ci
+                    else
+                        echo "NVM not found"
+                        exit 1
+                    fi
+                '''
+            }
+        }
 
         stage('Dependency Vulnerability Scan') {
             steps {
                 echo 'Running npm audit for known CVEs...'
-                sh 'npm audit --audit-level=high'
+
+                sh '''
+                    npm audit --audit-level=high || {
+                        echo "Security vulnerabilities found"
+                        exit 1
+                    }
+                '''
             }
         }
 
         stage('Run Tests') {
             steps {
                 echo 'Running test suite...'
-                sh 'npm test -- --watchAll=false'
+                sh 'npm test -- --watchAll=false || exit 1'
             }
         }
 
@@ -118,14 +121,14 @@ pipeline {
         stage('Container Image Scan - Trivy') {
             steps {
                 echo 'Scanning Docker image for vulnerabilities with Trivy...'
-                sh """
+                sh '''
                     trivy image \
                         --exit-code 1 \
-                        --severity CRITICAL \
+                        --severity HIGH,CRITICAL \
                         --format table \
                         --output trivy-report.txt \
                         ${IMAGE_NAME}:${IMAGE_TAG}
-                """
+                '''
             }
             post {
                 always {
@@ -133,7 +136,7 @@ pipeline {
                                      allowEmptyArchive: true
                 }
                 failure {
-                    echo 'CRITICAL vulnerabilities found in Docker image. Pipeline halted.'
+                    echo 'Vulnerabilities found in Docker image.'
                 }
             }
         }
@@ -141,33 +144,26 @@ pipeline {
         stage('Push Docker Image') {
             steps {
                 echo 'Pushing verified image to Docker Hub...'
-                sh """
+                sh '''
                     echo ${DOCKER_CREDENTIALS_PSW} | \
                     docker login -u ${DOCKER_CREDENTIALS_USR} --password-stdin
+
                     docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                """
+                '''
             }
         }
-
     }
 
     post {
         success {
-            echo '✅ Pipeline completed. All security scans passed. Image pushed.'
+            echo '✅ Pipeline completed successfully. Image pushed.'
         }
         failure {
-            echo '❌ Pipeline failed. Check stage logs and archived security reports.'
+            echo '❌ Pipeline failed. Check logs and reports.'
         }
         always {
-            node('built-in') {
-                script {
-                    if (env.IMAGE_NAME) {
-                        sh "docker rmi ${env.IMAGE_NAME}:${env.IMAGE_TAG} || true"
-                    }
-                }
-                deleteDir()
-            }
+            sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
+            deleteDir()
         }
     }
-
 }
