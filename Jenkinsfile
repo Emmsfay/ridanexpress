@@ -12,7 +12,7 @@ pipeline {
         DOCKER_CREDENTIALS = credentials('dockerhub-credentials')
         SONAR_TOKEN        = credentials('sonarqube-token')
         IMAGE_NAME         = "${DOCKER_CREDENTIALS_USR}/ridanexpress"
-        IMAGE_TAG          = "${BUILD_NUMBER}"   // use build number, not "latest" — traceable and immutable
+        IMAGE_TAG          = "${BUILD_NUMBER}"   // build number = traceable, immutable tag
         SONAR_PROJECT_KEY  = 'ridanexpress'
     }
 
@@ -30,7 +30,6 @@ pipeline {
         // ── STAGE 2: Secret Detection ───────────────────────────
         // Runs FIRST — before installing anything or touching the code
         // Scans for hardcoded API keys, tokens, passwords using Gitleaks
-        // If secrets are found, pipeline stops immediately — nothing proceeds
         // || true prevents pipeline failure so the report is still archived
         stage('Secret Detection') {
             steps {
@@ -46,7 +45,7 @@ pipeline {
             post {
                 always {
                     // Archive the report regardless of pass/fail
-                    // View it under the build's Artifacts in Jenkins UI
+                    // View it under the build Artifacts in Jenkins UI
                     archiveArtifacts artifacts: 'gitleaks-report.json',
                                      allowEmptyArchive: true
                 }
@@ -65,8 +64,8 @@ pipeline {
 
         // ── STAGE 4: Dependency Vulnerability Scan ─────────────
         // npm audit checks every package in node_modules against
-        // the npm advisory database for known CVEs (Common Vulnerabilities and Exposures)
-        // --audit-level=high means the pipeline only fails on HIGH or CRITICAL severity
+        // the npm advisory database for known CVEs
+        // --audit-level=high only fails on HIGH or CRITICAL severity
         // LOW and MODERATE issues are reported but do not block the build
         stage('Dependency Vulnerability Scan') {
             steps {
@@ -88,8 +87,8 @@ pipeline {
         // ── STAGE 6: SAST with SonarQube ───────────────────────
         // Static Application Security Testing — scans source code for
         // security hotspots, bugs, and code smells WITHOUT executing it
-        // sonar-project.properties at repo root holds the project config
-        // withSonarQubeEnv injects the SonarQube server URL and auth automatically
+        // sonar-project.properties at repo root holds all project config
+        // withSonarQubeEnv injects the server URL and auth token automatically
         stage('SAST - SonarQube Analysis') {
             steps {
                 echo 'Running SonarQube static analysis...'
@@ -100,9 +99,9 @@ pipeline {
         }
 
         // ── STAGE 7: SonarQube Quality Gate ────────────────────
-        // Waits for SonarQube to finish processing the analysis results
-        // abortPipeline: true means the pipeline stops if quality gate fails
-        // timeout prevents the pipeline hanging forever if SonarQube is slow
+        // Waits for SonarQube to finish processing analysis results
+        // abortPipeline: true stops the pipeline if quality gate fails
+        // timeout prevents the pipeline hanging if SonarQube is slow
         stage('Quality Gate') {
             steps {
                 echo 'Waiting for SonarQube Quality Gate result...'
@@ -126,7 +125,7 @@ pipeline {
         // ── STAGE 9: Build Docker Image ─────────────────────────
         // DOCKER_BUILDKIT=1 is REQUIRED — the Dockerfile uses
         // --mount=type=cache for npm caching which only works with BuildKit
-        // Without this, the build will fail with an unsupported syntax error
+        // Without this, the build fails with an unsupported syntax error
         stage('Build Docker Image') {
             environment {
                 DOCKER_BUILDKIT = '1'
@@ -139,7 +138,7 @@ pipeline {
 
         // ── STAGE 10: Container Image Scan with Trivy ──────────
         // Scans the built Docker image for OS-level and library CVEs
-        // --exit-code 1 + --severity CRITICAL: fails the pipeline on CRITICAL issues
+        // --exit-code 1 + --severity CRITICAL: fails pipeline on CRITICAL issues
         // HIGH severity issues appear in the report but do not fail the build
         // Report is archived as a build artifact for review
         stage('Container Image Scan - Trivy') {
@@ -167,8 +166,7 @@ pipeline {
 
         // ── STAGE 11: Push Docker Image ─────────────────────────
         // Only reached if ALL previous security stages passed
-        // Uses --password-stdin instead of -p flag — safer, password never
-        // appears in process list or shell history
+        // --password-stdin keeps credentials out of shell history and process list
         stage('Push Docker Image') {
             steps {
                 echo 'Pushing verified and scanned image to Docker Hub...'
@@ -199,15 +197,15 @@ pipeline {
             """
         }
         always {
-            // Remove the local Docker image to free disk space on the Jenkins agent
-            // || true prevents this cleanup step from failing the post block
-             script {
-                 if (env.IMAGE_NAME) {
-                     sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
-                 }
-             }
-             cleanWs()
+            // Guard against IMAGE_NAME not being set if pipeline failed early
+            script {
+                if (env.IMAGE_NAME) {
+                    sh "docker rmi ${IMAGE_NAME}:${IMAGE_TAG} || true"
+                }
+            }
+            // deleteDir() is built into Jenkins — no plugin required
+            // Wipes the workspace so the next build starts completely clean
+            deleteDir()
         }
-    
-     }
+    }
 }
