@@ -46,6 +46,14 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 echo 'Installing dependencies with npm ci...'
+                script {
+                    // Ensure Jenkins' Node tool is available and print versions for debugging
+                    def nodeHome = tool name: 'Node22', type: 'NodeJS'
+                    env.PATH = "${nodeHome}/bin:${env.PATH}"
+                    sh 'echo "Using node from: $(which node || true)"'
+                    sh 'node --version || true'
+                    sh 'npm --version || true'
+                }
                 sh 'npm ci'
             }
         }
